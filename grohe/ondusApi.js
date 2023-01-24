@@ -1,4 +1,4 @@
-// Note that the code is derived from the great work of the authors of the following projects: 
+// Note that the code is derived from the great work of the authors of the following projects:
 // https://github.com/FlorianSW/grohe-ondus-api-java/issues/3
 // https://github.com/faune/homebridge-grohe-sense
 
@@ -15,7 +15,7 @@ let refreshUrl = apiUrl + '/oidc/refresh';
 
 let actionPattern = "action=\"([^\"]*)\"";
 let actionPrefix = "action=";
-  
+
 
 class OndusSession {
     constructor() {
@@ -43,13 +43,13 @@ class OndusSession {
     //   - KC_RESTART
     // --> content is a webpage with a login form containing action="https://..."
     // --> login with this actionUrl
-    // 
+    //
     // Status 302 (Found = already logged in)
     //   2 Cookies are set for idp2-apigw.cloud.grohe.com/
     //   - AWSALB
     //   - AWSALBCORS
-    // --> response.headers.Location = 
-    // 
+    // --> response.headers.Location =
+    //
     // GET https://idp2-apigw.cloud.grohe.com/v1/sso/auth/realms/idm-apigw/protocol/openid-connect/auth?redirect_uri=ondus://idp2-apigw.cloud.grohe.com/v3/iot/oidc/token...)
     // Status 200 (OK)
     //   2 Cookies are set for idp2-apigw.cloud.grohe.com/v1/sso/auth/realms/idm-apigw/
@@ -61,37 +61,41 @@ class OndusSession {
             superagent
                 .get(loginUrl)
                 .end((error, response) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        if(response.status == 200){
-                            let page = response.text;
-                
-                            let regEx = new RegExp(actionPattern);
-                            let match = regEx.exec(page);
-                            if (match !== null) {
-                                var actionUrlText = match[0].replace(actionPrefix, '');
-                                let encodedActionUrl = actionUrlText.substring(1, actionUrlText.length - 1);
-                                
-                                session.actionUrl = he.decode(encodedActionUrl);
+                    try {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            if(response.status == 200){
+                                let page = response.text;
+
+                                let regEx = new RegExp(actionPattern);
+                                let match = regEx.exec(page);
+                                if (match !== null) {
+                                    var actionUrlText = match[0].replace(actionPrefix, '');
+                                    let encodedActionUrl = actionUrlText.substring(1, actionUrlText.length - 1);
+
+                                    session.actionUrl = he.decode(encodedActionUrl);
+                                    session.cookie = response.header['set-cookie'];
+                                    resolve(response);
+                                }
+                                else {
+                                    reject("action not found in webform.");
+                                }
+                            }
+                            else if(response.status == 302) {
+                                // TODO: not tested!!!
                                 session.cookie = response.header['set-cookie'];
+                                session.tokenUrl = response.header.Location;
                                 resolve(response);
                             }
                             else {
-                                reject("action not found in webform.");
+                                reject("Failed to get response from " + loginUrl);
                             }
                         }
-                        else if(response.status == 302) {
-                            // TODO: not tested!!!
-                            session.cookie = response.header['set-cookie'];
-                            session.tokenUrl = response.header.Location;
-                            resolve(response);
-                        }
-                        else {
-                            reject("Failed to get response from " + loginUrl);
-                        }
+		    } catch (err) {
+                        reject("Caught Excption: " + err);
                     }
-                });
+		});
         });
     };
 
@@ -117,13 +121,12 @@ class OndusSession {
     //         ?state=...
     //         &session_state=...
     //         &code=...
-    //     Status 200 (OK) --> "access_token" = 
-    // 
+    //     Status 200 (OK) --> "access_token" =
+    //
     // Status 200 (OK) = no sccuess
     getTokenUrl(username, password) {
         let session = this;
         return new Promise(function (resolve, reject) {
-            
             const form = new URLSearchParams();
             form.set('username', username);
             form.set('password', password);
@@ -137,15 +140,18 @@ class OndusSession {
                 .send(content)
                 .buffer(false)
                 .redirects(0)
-                .end((error, response) => {    
-                    // Note that error can be true when status is 302 which means Found and is a success.
-                    if (response && response.header.location) {
-                    
-                        let status = response.status;
-                        session.tokenUrl = response.header.location.replace('ondus://', 'https://');
-                        resolve(response);
-                    } else {
-                        reject('Login for user ' + username + ' into grohe cloud failed:/n' + error );
+                .end((error, response) => {
+                    try {
+                        // Note that error can be true when status is 302 which means Found and is a success.
+                        if (response && response.header.location) {
+                            let status = response.status;
+                            session.tokenUrl = response.header.location.replace('ondus://', 'https://');
+                            resolve(response);
+                        } else {
+                            reject('Login for user ' + username + ' into grohe cloud failed:/n' + error );
+                        }
+		    } catch (err) {
+                        reject("Caught Excption: " + err);
                     }
                 });
             });
@@ -158,18 +164,22 @@ class OndusSession {
                 .get(session.tokenUrl)
                 .set('Cookie', session.cookie)
                 .end( (error, response) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        if (response.body.access_token && response.body.refresh_token) {
-                            session.accessToken = response.body.access_token;
-                            session.accessTokenExpiresIn = response.body.expires_in;
-                            session.refreshToken = response.body.refresh_token;
-                            session.refreshTokenExpiresIn = response.body.refresh_expires_in;
-                            resolve(response);
+                    try {
+                        if (error) {
+                            reject(error);
                         } else {
-                            reject("getRefreshToken failed to get token.");
+                            if (response.body.access_token && response.body.refresh_token) {
+                                session.accessToken = response.body.access_token;
+                                session.accessTokenExpiresIn = response.body.expires_in;
+                                session.refreshToken = response.body.refresh_token;
+                                session.refreshTokenExpiresIn = response.body.refresh_expires_in;
+                                resolve(response);
+                            } else {
+                                reject("getRefreshToken failed to get token.");
+                            }
                         }
+                    } catch (err) {
+                        reject("Caught Excption: " + err);
                     }
                 });
             });
@@ -184,16 +194,20 @@ class OndusSession {
                 .set('accept', 'json')
                 .send({'refresh_token' : session.refreshToken})
                 .end((error, response) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        if (response.body.access_token && response.body.expires_in) {
-                            session.accessToken = response.body.access_token;
-                            session.accessTokenExpiresIn = response.body.expires_in;
-                            resolve(response);
+                    try {
+                        if (error) {
+                            reject(error);
                         } else {
-                            reject("Failed to refresh access token");              
+                            if (response.body.access_token && response.body.expires_in) {
+                                session.accessToken = response.body.access_token;
+                                session.accessTokenExpiresIn = response.body.expires_in;
+                                resolve(response);
+                            } else {
+                                reject("Failed to refresh access token");
+                            }
                         }
+                    } catch (err) {
+                        reject("Caught Excption: " + err);
                     }
                 });
             });
@@ -223,10 +237,14 @@ class OndusSession {
                 .set('Authorization', 'Bearer ' + session.accessToken)
                 .set('accept', 'json')
                 .end((error, response) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        resolve(response);
+                    try {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            resolve(response);
+                        }
+                    } catch (err) {
+                        reject("Caught Excption: " + err);
                     }
                 });
             });
@@ -242,10 +260,14 @@ class OndusSession {
                 .set('accept', 'json')
                 .send(data)
                 .end((error, response) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        resolve(response);
+                    try {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            resolve(response);
+                        }
+                    } catch (err) {
+                        reject("Caught Excption: " + err);
                     }
                 });
             });
@@ -315,11 +337,11 @@ class OndusSession {
         let url = apiUrl + '/locations/' + locationId + '/rooms/' + roomId + '/appliances/' + applianceId + '/command';
         return this.get(url);
     }
-    
+
     setApplianceCommand(locationId, roomId, applianceId, data) {
         let url = apiUrl + '/locations/' + locationId + '/rooms/' + roomId + '/appliances/' + applianceId + '/command';
         return this.post(url, data);
-    }   
+    }
 };
 
 // Exported Methds
@@ -330,7 +352,7 @@ async function login(username, password) {
     await session.getActionUrl();
     await session.getTokenUrl(username, password);
     await session.getRefreshToken();
-    
+
     session.start();
     return session;
 }
@@ -363,7 +385,7 @@ function convertNotification(notification) {
                     560 : 'Firmware update for blue available',
                     601 : 'Nest away mode automatic control off',
                     602 : 'Nest home mode automatic control off',
-                },  
+                },
             },
             // NOTIFICATION_CATEGORY_WARNING
             20 : {
@@ -449,5 +471,5 @@ let OndusType = {
 exports.login = login;
 exports.logoff = logoff;
 exports.convertNotification = convertNotification;
-exports.OndusType = Object.freeze(OndusType); 
+exports.OndusType = Object.freeze(OndusType);
 

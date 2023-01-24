@@ -5,14 +5,14 @@
 module.exports = function (RED) {
     "use strict";
     let ondusApi = require('./ondusApi.js');
-    	
-    // check if the input is already a date, if not it is probably a value in milliseconds. 
+
+    // check if the input is already a date, if not it is probably a value in milliseconds.
     function convertToDate(input) {
         let date = new Date(input);
         return date;
     }
 
-    // Converts a status object to json. 
+    // Converts a status object to json.
     function convertStatus(status) {
         let convertedStatus = {};
 
@@ -24,10 +24,11 @@ module.exports = function (RED) {
         return convertedStatus;
     }
 
-    function getMin(newValue, oldValue) {   
+    function getMin(newValue, oldValue) {
         if (isNaN(oldValue)) {
             return newValue;
-        }                   
+        }
+
         if (newValue < oldValue) {
             return newValue;
         }
@@ -36,10 +37,11 @@ module.exports = function (RED) {
         }
     }
 
-    function getMax(newValue, oldValue) { 
+    function getMax(newValue, oldValue) {
         if (isNaN(oldValue)) {
             return newValue;
-        }                 
+        }
+
         if (newValue > oldValue) {
             return newValue;
         }
@@ -59,7 +61,7 @@ module.exports = function (RED) {
         let maxFlowrate = Number.NaN;
         let minPressure = Number.NaN;
         let maxPressure = Number.NaN;
-        
+
         let length = measurement.length;
         for (let i=0; i < length; i++) {
             let item = measurement[i];
@@ -75,11 +77,11 @@ module.exports = function (RED) {
             let humidity = item.humidity;
             minHumidity = getMin(humidity, minHumidity);
             maxHumidity = getMax(humidity, maxHumidity);
-            
+
             let flowrate = item.flowrate;
             minFlowrate = getMin(flowrate, minFlowrate);
             maxFlowrate = getMax(flowrate, maxFlowrate);
-    
+
             let pressure = item.pressure;
             minPressure = getMin(pressure, minPressure);
             maxPressure = getMax(pressure, maxPressure);
@@ -88,7 +90,7 @@ module.exports = function (RED) {
         let from = measurement[0].timestamp;
         let to = measurement[length - 1].timestamp;
         let duration = (new Date(from) - new Date(to)) / 1000;
-            
+
         let convertedMeasurement = {
             from : from,
             to : to,
@@ -123,7 +125,7 @@ module.exports = function (RED) {
                 max : maxFlowrate,
             }
         }
-         
+
         if (!isNaN(minPressure)){
             convertedMeasurement.pressure = {
                 min : minPressure,
@@ -133,7 +135,7 @@ module.exports = function (RED) {
 
         return convertedMeasurement;
     }
-    
+
     function convertWithdrawals(withdrawals) {
 
         let totalWaterConsumption = 0;
@@ -143,7 +145,7 @@ module.exports = function (RED) {
         let totalDuration = 0;
         let minDuration = Number.NaN;
         let maxDuration = Number.NaN;
-        
+
         let todayWaterConsumption = 0;
         let todayWaterCost = 0;
         let todayEnerygCost = 0;
@@ -163,7 +165,7 @@ module.exports = function (RED) {
             totalDuration += duration;
             minDuration = getMin(duration, minDuration);
             maxDuration = getMax(duration, maxDuration);
-        
+
             totalWaterConsumption += item.waterconsumption;
             totalWaterCost += item.water_cost;
             totalEnerygCost += item.energy_cost;
@@ -211,7 +213,7 @@ module.exports = function (RED) {
         return convertWithdrawals;
     }
 
-    // Calculates statistics for a measurement data object. 
+    // Calculates statistics for a measurement data object.
     function convertData(data) {
         let statistics = {};
 
@@ -234,7 +236,7 @@ module.exports = function (RED) {
         return statistics;
     }
 
-    // Converts notifications to a notification with text. 
+    // Converts notifications to a notification with text.
     function convertNotifications(notifications) {
         let convertedNotifications = [];
 
@@ -260,15 +262,15 @@ module.exports = function (RED) {
         node.connected = false;
 
         node.appliancesByRoomName = {};
-        
-        if(node.credentials !== undefined && node.credentials.username !== undefined && node.credentials.password !== undefined 
+
+        if(node.credentials !== undefined && node.credentials.username !== undefined && node.credentials.password !== undefined
             && node.credentials.username !== '' && node.credentials.password !== '') {
 
             (async() => {
 
                 try {
                     node.session = await ondusApi.login(node.credentials.username, node.credentials.password);
-                    
+
                     let response = await node.session.getDahsboard();
                     let dashboard = JSON.parse(response.text);
 
@@ -278,9 +280,9 @@ module.exports = function (RED) {
                         let location = locations[i];
                         if (location.name === node.locationName){
                             node.location = location;
-                        
+
                             node.rooms = location.rooms;
-                        
+
                             for (let j = 0; j < node.rooms.length; j++) {
                                 let room = node.rooms [j];
 
@@ -302,7 +304,7 @@ module.exports = function (RED) {
                     node.connected = false;
                     node.emit('initializeFailed', exception);
                     node.warn(exception);
-                }    
+                }
             })()
         }
         else {
@@ -322,9 +324,8 @@ module.exports = function (RED) {
         });
 
         this.getApplianceIds = function (roomName, applianceName) {
-        
             let applianceIds;
-          
+
             if (node.appliancesByRoomName[roomName] !== undefined) {
                 let value = node.appliancesByRoomName[roomName];
 
@@ -337,7 +338,7 @@ module.exports = function (RED) {
                         applianceIds = {
                             locationId : node.location.id,
                             roomId : room.id,
-                            applianceId : appliance.appliance_id // why not id here? 
+                            applianceId : appliance.appliance_id // why not id here?
                         };
 
                         break;
@@ -355,8 +356,8 @@ module.exports = function (RED) {
             password: { type: "password" },
         }
     });
-	
-	
+
+
     // --------------------------------------------------------------------------------------------
     // The sense node controls a grohe sense.
     function GroheSenseNode(config) {
@@ -369,17 +370,16 @@ module.exports = function (RED) {
 
 		node.config = RED.nodes.getNode(node.location);
         if (node.config) {
-               
             node.locationId = node.config.locationId;
 
             node.status({ fill: 'red', shape: 'ring', text: 'initializing' });
 
             node.onInitialized = function () {
-            
+
                 node.applianceIds = node.config.getApplianceIds(node.roomName, node.applianceName);
                 if (node.applianceIds !== undefined){
                     node.status({ fill: 'green', shape: 'ring', text: 'connected' });
-    
+
                     node.on('input', async function (msg) {
 
                         try
@@ -404,19 +404,19 @@ module.exports = function (RED) {
                                 node.applianceIds.roomId,
                                 node.applianceIds.applianceId);
                             let info = JSON.parse(responseInfo.text);
-                            
+
                             let responseStatus = await node.config.session.getApplianceStatus(
                                 node.applianceIds.locationId,
                                 node.applianceIds.roomId,
                                 node.applianceIds.applianceId);
                             let status = JSON.parse(responseStatus.text);
-                            
+
                             let responseNotifications = await node.config.session.getApplianceNotifications(
                                 node.applianceIds.locationId,
                                 node.applianceIds.roomId,
                                 node.applianceIds.applianceId);
                             let notifications = JSON.parse(responseNotifications.text);
-   
+
                             let data;
                             if(msg.payload !== undefined && msg.payload.data !== undefined ){
                                 let fromDate = convertToDate(msg.payload.data.from);
@@ -447,7 +447,7 @@ module.exports = function (RED) {
                             if(status != null){
                                 result.status = convertStatus(status);
                             }
-                            
+
                             if(notifications != null){
                                 result.notifications = convertNotifications(notifications);
                             }
@@ -457,7 +457,7 @@ module.exports = function (RED) {
                                 result.statistics = convertData(data.data);
                             }
 
-                            if (info[0].type === ondusApi.OndusType.SenseGuard) {
+                            if (Array.isArray(info) && info.length && info[0].type === ondusApi.OndusType.SenseGuard) {
                                 let response4 = await node.config.session.getApplianceCommand(
                                     node.applianceIds.locationId,
                                     node.applianceIds.roomId,
@@ -466,10 +466,10 @@ module.exports = function (RED) {
                                 result.command = command.command;
                                 // Here timestamp could also be interessting in future.
                             }
-                        
+
                             msg.payload = result;
                             node.send([msg]);
-                            
+
                             let notificationCount = 0;
                             if(notifications !== undefined){
                                 notificationCount = notifications.length;
@@ -488,10 +488,10 @@ module.exports = function (RED) {
                             node.status({ fill: 'red', shape: 'ring', text: 'failed' });
                         }
                     });
-                }   
+                }
                 else {
                     node.status({ fill: 'red', shape: 'ring', text: node.applianceName + ' not found ' });
-                }     
+                }
 
             };
             node.config.addListener('initialized', node.onInitialized);
@@ -509,7 +509,7 @@ module.exports = function (RED) {
                 if (node.onError) {
                     node.config.removeListener('initializeFailed', node.onError);
                 }
-    
+
                 node.status({});
             });
         }
